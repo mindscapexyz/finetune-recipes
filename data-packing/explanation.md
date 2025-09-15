@@ -1,5 +1,5 @@
 # Explain the notebook content
-_Exported on 15/09/2025 at 23:17:30 GMT+8 from Cursor (1.5.11)_
+_Exported on 15/09/2025 at 23:27:47 GMT+8 from Cursor (1.5.11)_
 
 ---
 
@@ -292,5 +292,113 @@ num_audio_tokens = (input_length - 2) // 1 + 1  # Remove second downsampling
 # For target TPS of 12.5 (half current rate)  
 input_length = (audio_length - 1) // 4 + 1  # More aggressive downsampling
 num_audio_tokens = input_length
+```
+
+---
+
+**User**
+
+if use higher TPS, which variables changed? raw samples? feature frames?
+
+---
+
+**Cursor**
+
+Great question! Let me clarify what changes when you use higher TPS and what stays the same.
+
+Looking at the calculation pipeline:
+
+```python
+# Step 1: Raw audio to feature frames
+audio_length = math.ceil(len(audio_) / processor.feature_extractor.hop_length)
+
+# Step 2: Feature frames to input length  
+input_length = (audio_length - 1) // 2 + 1
+
+# Step 3: Input length to token count
+num_audio_tokens = (input_length - 2) // 2 + 1
+```
+
+## What DOESN'T Change with Higher TPS
+
+1. **Raw samples**: `len(audio_)` stays the same
+   - A 10-second audio file at 16kHz will always have 160,000 samples
+   - This is determined by the audio duration and sampling rate
+
+2. **Feature frames**: `audio_length` stays the same  
+   - Still `160,000 / 160 = 1,000 frames` for our example
+   - This is determined by the feature extractor's `hop_length`, not the tokenizer
+
+## What CHANGES with Higher TPS
+
+Only the **downsampling ratios** in steps 2 and 3 need to change:
+
+### Current Implementation (~25 TPS):
+```python
+input_length = (audio_length - 1) // 2 + 1      # Divide by 2
+num_audio_tokens = (input_length - 2) // 2 + 1  # Divide by 2 again
+# Total downsampling: 4x (2 × 2)
+```
+
+### For Higher TPS (e.g., 50 TPS - double the rate):
+```python
+input_length = audio_length                      # No downsampling
+num_audio_tokens = (input_length - 2) // 2 + 1  # Divide by 2 only
+# Total downsampling: 2x (1 × 2)
+```
+
+### For Even Higher TPS (e.g., 100 TPS - 4x the rate):
+```python
+input_length = audio_length                      # No downsampling  
+num_audio_tokens = input_length                  # No downsampling
+# Total downsampling: 1x (no downsampling)
+```
+
+## Example with Numbers
+
+For 10-second audio (1,000 feature frames):
+
+| TPS Target | input_length calculation | num_audio_tokens calculation | Final tokens |
+|------------|-------------------------|------------------------------|--------------|
+| 25 TPS (current) | `(1000-1)//2+1 = 500` | `(500-2)//2+1 = 250` | 250 |
+| 50 TPS (2x) | `1000` | `(1000-2)//2+1 = 500` | 500 |  
+| 100 TPS (4x) | `1000` | `1000` | 1000 |
+
+## Key Insight
+
+The **feature extraction stage remains unchanged** because it's determined by the audio model's architecture (hop_length, window size, etc.). Only the **tokenization ratios** change to achieve different TPS rates.
+
+This makes sense because:
+- Feature extraction is about converting audio waveforms to spectral representations
+- Tokenization is about how many discrete tokens represent those features
+- You can have the same features but different token granularities
+
+```python
+# Step 1: Raw audio to feature frames
+audio_length = math.ceil(len(audio_) / processor.feature_extractor.hop_length)
+
+# Step 2: Feature frames to input length  
+input_length = (audio_length - 1) // 2 + 1
+
+# Step 3: Input length to token count
+num_audio_tokens = (input_length - 2) // 2 + 1
+```
+
+```python
+input_length = (audio_length - 1) // 2 + 1      # Divide by 2
+num_audio_tokens = (input_length - 2) // 2 + 1  # Divide by 2 again
+# Total downsampling: 4x (2 × 2)
+```
+
+```python
+input_length = audio_length                      # No downsampling
+num_audio_tokens = (input_length - 2) // 2 + 1  # Divide by 2 only
+# Total downsampling: 2x (1 × 2)
+```
+
+```python
+input_length = audio_length                      # No downsampling  
+num_audio_tokens = input_length                  # No downsampling
+# Total downsampling: 1x (no downsampling)
 ```
 
