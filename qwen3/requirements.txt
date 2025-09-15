@@ -1,0 +1,6 @@
+accelerate 
+peft 
+trl 
+bitsandbytes
+transformers
+huggingface_hub
